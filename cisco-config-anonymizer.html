@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cisco Config Anonymizer</title>
+  <meta name="description" content="Browser-basiertes Tool zum Anonymisieren von Cisco IOS / IOS-XE / WLC Konfigurationen. Kein Server, keine Datenweitergabe – alles lokal im Browser.">
+  <meta name="author" content="Denis Michel">
+  <meta name="robots" content="noindex, nofollow">
+  <meta property="og:title" content="Cisco Config Anonymizer">
+  <meta property="og:description" content="Cisco-Konfigurationen anonymisieren, sicher teilen und wiederherstellen – komplett im Browser, ohne Server.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --accent: #1f6feb;
+      --accent-h: #388bfd;
+      --success: #238636;
+      --success-t: #3fb950;
+      --danger: #f85149;
+      --warn: #d29922;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --bright: #f0f6fc;
+      --code: #e6edf3;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+
+    /* ── Header ── */
+    .hdr { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 10px; }
+    .hdr-logo { width: 34px; height: 34px; background: var(--accent); border-radius: 8px; display: grid; place-items: center; font-size: 18px; flex-shrink: 0; }
+    .hdr h1 { font-size: 17px; font-weight: 600; color: var(--bright); }
+    .hdr-sub { font-size: 12px; color: var(--muted); margin-left: 2px; }
+
+    /* ── Tabs ── */
+    .tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; gap: 4px; }
+    .tab { padding: 11px 18px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--muted); font-weight: 500; font-size: 13px; transition: .15s; user-select: none; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--bright); border-bottom-color: var(--accent); }
+
+    /* ── Layout ── */
+    .main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+    .tab-pane { display: none; } .tab-pane.active { display: block; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media(max-width:700px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── Cards ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    .card-title { font-size: 14px; font-weight: 600; color: var(--bright); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+
+    /* ── Drop zone ── */
+    .dz { border: 2px dashed var(--border); border-radius: 6px; padding: 28px 20px; text-align: center; cursor: pointer; transition: .2s; position: relative; }
+    .dz:hover, .dz.over { border-color: var(--accent); background: rgba(31,111,235,.06); }
+    .dz input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .dz-icon { font-size: 28px; margin-bottom: 6px; }
+    .dz-txt { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .dz-txt strong { color: var(--accent); }
+
+    .sep { text-align: center; color: var(--muted); font-size: 12px; margin: 10px 0; position: relative; }
+    .sep::before,.sep::after { content:''; position:absolute; top:50%; width:calc(50% - 20px); height:1px; background:var(--border); }
+    .sep::before{left:0} .sep::after{right:0}
+
+    /* ── Textarea ── */
+    textarea { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--code); font-family: 'Consolas','Monaco',monospace; font-size: 12px; padding: 10px 12px; resize: vertical; outline: none; transition: border-color .15s; }
+    textarea:focus { border-color: var(--accent); }
+
+    /* ── Buttons ── */
+    .btn { padding: 7px 15px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: .15s; display: inline-flex; align-items: center; gap: 5px; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-h); }
+    .btn-primary:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-success:hover { background: #2ea043; }
+    .btn-success:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+    .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--muted); }
+    .btn-danger { background: transparent; color: var(--danger); border: 1px solid rgba(248,81,73,.4); }
+    .btn-danger:hover { background: rgba(248,81,73,.1); }
+
+    /* ── Table ── */
+    .tbl-wrap { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .tbl-scroll { max-height: 420px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: var(--surface2); padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; }
+    td { padding: 7px 12px; border-bottom: 1px solid rgba(48,54,61,.5); font-size: 13px; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+    tr.disabled td { opacity: .4; }
+
+    /* ── Badges ── */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .b-hostname { background:#1f6feb1a;color:#58a6ff;border:1px solid #1f6feb44; }
+    .b-domain   { background:#8957e51a;color:#bc8cff;border:1px solid #8957e544; }
+    .b-password { background:#f851491a;color:#ff7b72;border:1px solid #f8514944; }
+    .b-snmp     { background:#d299221a;color:#e3b341;border:1px solid #d2992244; }
+    .b-ip       { background:#3fb9501a;color:#56d364;border:1px solid #3fb95044; }
+    .b-bgp      { background:#1f6feb1a;color:#79c0ff;border:1px solid #1f6feb44; }
+    .b-vlan     { background:#8957e51a;color:#d2a8ff;border:1px solid #8957e544; }
+    .b-ntp      { background:#3fb9501a;color:#7ee787;border:1px solid #3fb95044; }
+    .b-syslog   { background:#d299221a;color:#ffa657;border:1px solid #d2992244; }
+    .b-vpn      { background:#f851491a;color:#ffa198;border:1px solid #f8514944; }
+    .b-dns      { background:#3fb9501a;color:#56d364;border:1px solid #3fb95044; }
+    .b-acl      { background:#1f6feb1a;color:#79c0ff;border:1px solid #1f6feb44; }
+    .b-iphost   { background:#8957e51a;color:#d2a8ff;border:1px solid #8957e544; }
+    .b-radius   { background:#d299221a;color:#ffa657;border:1px solid #d2992244; }
+    .b-rest     { background:#3fb9501a;color:#7ee787;border:1px solid #3fb95044; }
+
+    /* ── Inputs in table ── */
+    .val-in { background: var(--surface2); border: 1px solid transparent; border-radius: 4px; color: var(--code); font-family: 'Consolas','Monaco',monospace; font-size: 12px; padding: 3px 7px; width: 100%; outline: none; transition: border-color .15s; }
+    .val-in:focus { border-color: var(--accent); background: var(--bg); }
+    .val-in:disabled { opacity: .5; cursor: not-allowed; }
+    .ph { font-family: 'Consolas','Monaco',monospace; font-size: 11px; color: var(--muted); }
+
+    /* ── Status messages ── */
+    .status { display: flex; align-items: flex-start; gap: 8px; padding: 10px 14px; border-radius: 6px; font-size: 13px; line-height: 1.5; }
+    .s-ok   { background:#23863614;border:1px solid #23863644;color:var(--success-t); }
+    .s-err  { background:#f8514914;border:1px solid #f8514944;color:var(--danger); }
+    .s-info { background:#1f6feb14;border:1px solid #1f6feb44;color:#58a6ff; }
+    .s-warn { background:#d2992214;border:1px solid #d2992244;color:var(--warn); }
+
+    /* ── Stats ── */
+    .stats { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 16px; }
+    .stat { display: flex; flex-direction: column; gap: 1px; }
+    .stat-n { font-size: 22px; font-weight: 700; color: var(--bright); }
+    .stat-l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; }
+
+    /* ── Filter chips ── */
+    .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .fc { padding: 3px 12px; border-radius: 16px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; transition: .15s; }
+    .fc:hover { border-color: var(--muted); color: var(--text); }
+    .fc.on { border-color: var(--accent); color: #58a6ff; background: rgba(31,111,235,.1); }
+
+    /* ── Misc ── */
+    .action-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+    .file-pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+    .file-pill .fn { color: var(--bright); font-weight: 500; }
+    .file-pill .fs { color: var(--muted); font-size: 11px; }
+    .hash-code { font-family: monospace; font-size: 11px; background: var(--surface2); padding: 2px 8px; border-radius: 4px; color: var(--muted); }
+    .cnt { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 1px 8px; font-size: 11px; color: var(--muted); }
+    .hidden { display: none !important; }
+    small { color: var(--muted); font-size: 12px; }
+    code { font-family: monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-logo">🔐</div>
+  <h1>Cisco Config Anonymizer</h1>
+  <span class="hdr-sub">IOS · IOS-XE · WLC</span>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="anon" onclick="switchTab('anon')">🔒 Anonymisieren</div>
+  <div class="tab" data-tab="merge" onclick="switchTab('merge')">🔓 Merge</div>
+  <div class="tab" data-tab="dict" onclick="switchTab('dict')">📚 Wörterbuch</div>
+</div>
+
+<div class="main">
+
+  <!-- ════════════════════ TAB: ANONYMIZE ════════════════════ -->
+  <div id="tab-anon" class="tab-pane active">
+
+    <!-- Step 1 -->
+    <div class="card" id="s1-card">
+      <div class="card-title">① Konfiguration laden</div>
+      <div class="dz" id="dz1"
+        ondrop="dzDrop(event,'cfg')" ondragover="dzOver(event)" ondragleave="dzLeave(event)">
+        <input type="file" id="file-cfg" accept=".txt,.cfg,.conf" onchange="dzFile(event,'cfg')">
+        <div class="dz-icon">📄</div>
+        <div class="dz-txt">Datei hierher ziehen oder <strong>klicken zum Auswählen</strong><br><small>.txt · .cfg · .conf</small></div>
+      </div>
+      <div class="sep">oder</div>
+      <textarea id="ta-cfg" rows="10" placeholder="Cisco-Konfiguration hier einfügen …"></textarea>
+      <div class="action-row">
+        <button class="btn btn-primary" onclick="doAnalyze()">🔍 Analysieren</button>
+        <button class="btn btn-ghost" onclick="doClear()">✕ Zurücksetzen</button>
+        <small id="s1-info"></small>
+      </div>
+    </div>
+
+    <!-- Step 2 (hidden until analyzed) -->
+    <div class="card hidden" id="s2-card">
+      <div class="card-title">
+        ② Erkannte Daten
+        <span class="cnt" id="s2-cnt"></span>
+      </div>
+
+      <div class="stats" id="s2-stats"></div>
+      <div class="filters" id="s2-filters"></div>
+
+      <div class="tbl-wrap">
+        <div class="tbl-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:28px"><input type="checkbox" id="chk-all" title="Alle an/ab" onchange="toggleAll(this.checked)"></th>
+                <th>Typ</th>
+                <th>Beschreibung</th>
+                <th>Originalwert (bearbeitbar)</th>
+                <th>Platzhalter</th>
+                <th>×</th>
+              </tr>
+            </thead>
+            <tbody id="s2-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="s2-notice" class="hidden" style="margin-top:10px"></div>
+
+      <div class="action-row">
+        <button class="btn btn-success" onclick="dlAnon()">⬇ Anonymisierte Config (.txt)</button>
+        <button class="btn btn-ghost"   onclick="dlData()">⬇ Datendatei (.json)</button>
+        <button class="btn btn-primary" onclick="dlBoth()">⬇ Beide herunterladen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════ TAB: DICT ════════════════════ -->
+  <div id="tab-dict" class="tab-pane">
+    <div class="card">
+      <div class="card-title">📚 Globales Wörterbuch <span class="cnt" id="gd-cnt"></span></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+        Alle bisher anonymisierten Werte — dateiübergreifend. Gleicher Wert = gleicher Platzhalter in allen Dateien.
+      </p>
+      <div class="action-row" style="margin-top:0;margin-bottom:14px">
+        <button class="btn btn-ghost" onclick="gdExport()">⬇ Exportieren (.json)</button>
+        <label class="btn btn-ghost" style="cursor:pointer">
+          ⬆ Importieren <input type="file" accept=".json" style="display:none" onchange="gdImportFile(event)">
+        </label>
+        <button class="btn btn-danger" onclick="if(confirm('Wörterbuch wirklich löschen?')) { gdClear(); }">🗑 Löschen</button>
+      </div>
+      <div id="gd-import-status" class="hidden" style="margin-bottom:10px"></div>
+      <div id="gd-stats" style="margin-bottom:14px"></div>
+      <div id="gd-table"></div>
+    </div>
+  </div>
+
+  <!-- ════════════════════ TAB: MERGE ════════════════════ -->
+  <div id="tab-merge" class="tab-pane">
+
+    <div class="card">
+      <div class="card-title">① Anonymisierte Konfiguration laden</div>
+      <div class="dz" ondrop="dzDrop(event,'mc')" ondragover="dzOver(event)" ondragleave="dzLeave(event)">
+        <input type="file" id="file-mc" accept=".txt,.cfg,.conf" onchange="dzFile(event,'mc')">
+        <div class="dz-icon">📄</div>
+        <div class="dz-txt">Datei hierher ziehen oder <strong>klicken zum Auswählen</strong><br>
+          <small>Datendatei wird automatisch erkannt</small></div>
+      </div>
+      <div id="mc-pill" class="hidden" style="margin-top:8px"></div>
+      <div id="md-auto-status" class="hidden" style="margin-top:8px"></div>
+
+      <!-- Fallback: manual JSON upload -->
+      <div id="md-fallback" class="hidden" style="margin-top:12px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">⚠️ Keine gespeicherten Daten gefunden — bitte Datendatei manuell laden:</div>
+        <div class="dz" style="padding:16px" ondrop="dzDrop(event,'md')" ondragover="dzOver(event)" ondragleave="dzLeave(event)">
+          <input type="file" id="file-md" accept=".json" onchange="dzFile(event,'md')">
+          <div class="dz-icon" style="font-size:20px">📋</div>
+          <div class="dz-txt">Datendatei (.json)</div>
+        </div>
+        <div id="md-pill" class="hidden" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- Saved configs list -->
+    <div class="card" id="m-saved-card">
+      <div class="card-title">💾 Im Browser gespeicherte Konfigurationen <span class="cnt" id="m-saved-cnt"></span></div>
+      <div id="m-saved-list"></div>
+    </div>
+
+    <div class="card hidden" id="m-verify">
+      <div class="card-title">② Verifikation &amp; Vorschau</div>
+      <div id="m-hash-status"></div>
+      <div id="m-summary" style="margin-top:10px;font-size:13px;color:var(--muted)"></div>
+    </div>
+
+    <div class="card hidden" id="m-action">
+      <div class="card-title">③ Merge ausführen</div>
+      <button class="btn btn-success" onclick="doMerge()">🔓 Merge &amp; Herunterladen (.txt)</button>
+      <div id="m-result" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+const S = {
+  origCfg: '',
+  anonCfg: '',
+  hash: '',
+  items: [],       // { id, type, label, value, count, enabled }
+  filter: 'all',
+  // merge
+  mCfg: null,      // { content, name }
+  mData: null,     // parsed JSON
+};
+
+// ═══════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  if (name === 'merge') renderSavedList();
+  if (name === 'dict')  renderDictTab();
+}
+
+function renderDictTab() {
+  const gd      = gdLoad();
+  const entries = Object.entries(gd.entries || {});
+  document.getElementById('gd-cnt').textContent = entries.length + ' Einträge';
+
+  // Stats by type
+  const tc = {};
+  entries.forEach(([,v]) => tc[v.type] = (tc[v.type]||0)+1);
+  document.getElementById('gd-stats').innerHTML =
+    `<div class="stats">${Object.entries(tc).map(([t,n]) => {
+      const m = TM[t]||{icon:'📌',name:t};
+      return `<div class="stat"><div class="stat-n">${n}</div><div class="stat-l">${m.icon} ${m.name}</div></div>`;
+    }).join('')}</div>` +
+    (gd.lastUpdated ? `<div style="font-size:11px;color:var(--muted)">Zuletzt aktualisiert: ${new Date(gd.lastUpdated).toLocaleString('de-DE')}</div>` : '');
+
+  if (!entries.length) {
+    document.getElementById('gd-table').innerHTML =
+      `<div style="color:var(--muted);font-size:13px">Noch keine Einträge. Anonymisiere eine Config, um das Wörterbuch zu befüllen.</div>`;
+    return;
+  }
+
+  // Sort by type then placeholder id
+  entries.sort((a,b) => a[1].type.localeCompare(b[1].type) || a[1].id.localeCompare(b[1].id));
+
+  document.getElementById('gd-table').innerHTML = `<div class="tbl-wrap"><div class="tbl-scroll"><table>
+    <thead><tr>
+      <th>Typ</th><th>Beschreibung</th><th>Originalwert</th><th>Platzhalter</th><th>Verwendet</th><th></th>
+    </tr></thead>
+    <tbody>${entries.map(([val, e]) => {
+      const m = TM[e.type]||{bc:'',icon:'📌',name:e.type};
+      return `<tr>
+        <td><span class="badge ${m.bc}">${m.icon} ${m.name}</span></td>
+        <td style="color:var(--muted);font-size:12px">${esc(e.label||'')}</td>
+        <td><span class="val-in" style="display:inline-block;padding:3px 7px">${esc(val)}</span></td>
+        <td><span class="ph">${esc(e.id)}</span></td>
+        <td><span class="cnt">${e.count||1}×</span></td>
+        <td><button class="btn btn-danger" style="padding:2px 8px;font-size:11px"
+          onclick="gdDeleteEntry(${JSON.stringify(esc(val))})">✕</button></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div></div>`;
+}
+
+function gdDeleteEntry(escapedVal) {
+  // Unescape HTML entities back to original value for lookup
+  const val = escapedVal.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
+  const gd = gdLoad();
+  delete gd.entries[val];
+  gdSave(gd);
+  renderDictTab();
+}
+
+// ═══════════════════════════════════════════════
+//  DROP ZONE HELPERS
+// ═══════════════════════════════════════════════
+function dzOver(e)  { e.preventDefault(); e.currentTarget.classList.add('over'); }
+function dzLeave(e) { e.currentTarget.classList.remove('over'); }
+function dzDrop(e, which) {
+  e.preventDefault(); e.currentTarget.classList.remove('over');
+  const f = e.dataTransfer.files[0]; if (f) loadFile(f, which);
+}
+function dzFile(e, which) { const f = e.target.files[0]; if (f) loadFile(f, which); }
+
+function loadFile(f, which) {
+  const rd = new FileReader();
+  rd.onload = ev => {
+    const txt = ev.target.result;
+    if (which === 'cfg') {
+      document.getElementById('ta-cfg').value = txt;
+      document.getElementById('s1-info').textContent = f.name + ' (' + fmtSz(f.size) + ')';
+    } else if (which === 'mc') {
+      S.mCfg = { content: txt, name: f.name };
+      showPill('mc-pill', '📄', f.name, f.size);
+      checkMergeReady();
+    } else if (which === 'md') {
+      try {
+        S.mData = JSON.parse(txt);
+        showPill('md-pill', '📋', f.name, f.size);
+        const cfgHashM = S.mCfg && S.mCfg.content.match(/^!\s*CONFIG-ANONYMIZER-HASH:\s*([a-f0-9-]+)/m);
+        verifyAndShow(cfgHashM ? cfgHashM[1].trim() : null);
+      } catch {
+        showEl('md-pill', `<div class="status s-err">❌ Ungültige JSON-Datei</div>`);
+        S.mData = null;
+      }
+    }
+  };
+  rd.readAsText(f);
+}
+
+function fmtSz(b) { return b < 1024 ? b + ' B' : (b / 1024).toFixed(1) + ' KB'; }
+function showPill(id, icon, name, sz) {
+  showEl(id, `<div class="file-pill">${icon} <span class="fn">${esc(name)}</span><span class="fs">${fmtSz(sz)}</span></div>`);
+}
+function showEl(id, html) {
+  const el = document.getElementById(id); el.innerHTML = html; el.classList.remove('hidden');
+}
+
+// ═══════════════════════════════════════════════
+//  EXTRACTION ENGINE
+// ═══════════════════════════════════════════════
+
+/* TYPE META: badge class, icon, display name */
+const TM = {
+  hostname: { bc:'b-hostname', icon:'🖥', name:'Hostname' },
+  domain:   { bc:'b-domain',   icon:'🌐', name:'Domain' },
+  user:     { bc:'b-domain',   icon:'👤', name:'Benutzername' },
+  password: { bc:'b-password', icon:'🔑', name:'Passwort' },
+  token:    { bc:'b-password', icon:'🎫', name:'Token' },
+  snmp:     { bc:'b-snmp',     icon:'📊', name:'SNMP' },
+  ip:       { bc:'b-ip',       icon:'🌍', name:'IP-Adresse' },
+  bgp:      { bc:'b-bgp',      icon:'🔄', name:'BGP' },
+  vlan:     { bc:'b-vlan',     icon:'🏷', name:'VLAN' },
+  ntp:      { bc:'b-ntp',      icon:'⏰', name:'NTP' },
+  syslog:   { bc:'b-syslog',   icon:'📝', name:'Syslog' },
+  vpn:      { bc:'b-vpn',      icon:'🔒', name:'VPN' },
+  dns:      { bc:'b-dns',      icon:'🔍', name:'DNS' },
+  acl:      { bc:'b-acl',      icon:'📋', name:'ACL' },
+  iphost:   { bc:'b-iphost',   icon:'📌', name:'IP Host' },
+  radius:   { bc:'b-radius',   icon:'📡', name:'RADIUS' },
+  rest:     { bc:'b-rest',     icon:'🔎', name:'IP (Rest)' },
+};
+
+/* Extraction rules – applied line-by-line (first match wins) */
+const RULES = [
+  // ── Identity
+  { t:'hostname', lbl:'Hostname',
+    re:/^(hostname\s+)(\S+)/, vi:2 },
+  { t:'domain', lbl:'Domain Name',
+    re:/^(ip\s+domain[- ]name\s+)(\S+)/, vi:2 },
+  // ── Usernames (before password rules)
+  { t:'user', lbl:'Benutzername',
+    re:/^(username\s+)(\S+)/, vi:2 },
+  { t:'user', lbl:'dot1x Benutzername',
+    re:/^(\s+dot1x\s+username\s+)(\S+)/, vi:2 },
+  // ── Credentials
+  { t:'password', lbl:'Enable Secret',
+    re:/^(enable\s+secret\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  { t:'password', lbl:'Enable Password',
+    re:/^(enable\s+password\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  { t:'password', lbl:'Benutzer-Passwort',
+    re:/^(username\s+\S+(?:\s+privilege\s+\d+)?\s+(?:secret|password)\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  { t:'password', lbl:'dot1x Passwort',
+    re:/^(\s+dot1x\s+username\s+\S+\s+password\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  { t:'password', lbl:'Line-Passwort',
+    re:/^(\s+password\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  { t:'password', lbl:'TACACS Key',
+    re:/^(tacacs(?:-server)?\s+key\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  { t:'password', lbl:'RADIUS Key',
+    re:/^(radius-server\s+key\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  { t:'password', lbl:'Server Key (generic)',
+    re:/^(\s+key\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  { t:'password', lbl:'Key-String',
+    re:/^(\s+key-string\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  { t:'password', lbl:'Dynamic-Author Server-Key',
+    re:/^(\s+client\s+\S+\s+server-key\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  // ── Token
+  { t:'token', lbl:'Cisco DNA Token',
+    re:/^(ap\s+cisco-dna\s+token\s+\d+\s+)(\S+)/, vi:2 },
+  // ── SNMP
+  { t:'snmp', lbl:'SNMP Community',
+    re:/^(snmp-server\s+community\s+)(\S+)/, vi:2 },
+  // ── BGP
+  { t:'bgp', lbl:'BGP AS-Nummer',
+    re:/^(router\s+bgp\s+)(\d+)/, vi:2 },
+  { t:'bgp', lbl:'BGP Remote-AS',
+    re:/^(\s+neighbor\s+\S+\s+remote-as\s+)(\d+)/, vi:2 },
+  // ── IPs (specific contexts)
+  { t:'ip', lbl:'BGP Neighbor',
+    re:/^(\s+neighbor\s+)((?:\d{1,3}\.){3}\d{1,3})(?=\s)/, vi:2 },
+  { t:'ip', lbl:'Interface IP',
+    re:/^(\s+ip\s+address\s+)((?:\d{1,3}\.){3}\d{1,3})(\s+(?:\d{1,3}\.){3}\d{1,3})?/, vi:2, maskAt:3 },
+  { t:'ip', lbl:'Secondary IP',
+    re:/^(\s+ip\s+address\s+(?:\S+\s+\S+\s+)+secondary\s+)((?:\d{1,3}\.){3}\d{1,3})/, vi:2 },
+  { t:'ip', lbl:'IP Route',
+    re:/^(ip\s+route\s+(?:vrf\s+\S+\s+)?)((?:\d{1,3}\.){3}\d{1,3})(\s+(?:\d{1,3}\.){3}\d{1,3})(\s+(?:\d{1,3}\.){3}\d{1,3})?/, vi:2, extras:[3,4] },
+  { t:'ip', lbl:'DHCP Relay',
+    re:/^(\s+ip\s+helper-address\s+)((?:\d{1,3}\.){3}\d{1,3})/, vi:2 },
+  { t:'ip', lbl:'HSRP IP',
+    re:/^(\s+standby\s+\d*\s*ip\s+)((?:\d{1,3}\.){3}\d{1,3})/, vi:2 },
+  { t:'ip', lbl:'VRRP IP',
+    re:/^(\s+vrrp\s+\d+\s+ip\s+)((?:\d{1,3}\.){3}\d{1,3})/, vi:2 },
+  { t:'ip', lbl:'Tunnel Destination',
+    re:/^(\s+tunnel\s+destination\s+)((?:\d{1,3}\.){3}\d{1,3})/, vi:2 },
+  { t:'ip', lbl:'Tunnel Source IP',
+    re:/^(\s+tunnel\s+source\s+)((?:\d{1,3}\.){3}\d{1,3})/, vi:2 },
+  { t:'ip', lbl:'RADIUS Server IP',
+    re:/^(\s*(?:radius-server\s+host|address\s+ipv[46]\s+))((?:\d{1,3}\.){3}\d{1,3})/, vi:2 },
+  { t:'ip', lbl:'TACACS Server',
+    re:/^(\s*(?:tacacs-server\s+host|address\s+ipv[46]\s+))((?:\d{1,3}\.){3}\d{1,3})/, vi:2 },
+  { t:'ip', lbl:'Network-Statement',
+    re:/^(\s+network\s+)((?:\d{1,3}\.){3}\d{1,3})(?:\s+(?:mask\s+)?((?:\d{1,3}\.){3}\d{1,3}))?/, vi:2, maskAt:3 },
+  // ── NTP
+  { t:'ntp', lbl:'NTP Server',
+    re:/^(ntp\s+server\s+(?:vrf\s+\S+\s+)?)(\S+)/, vi:2 },
+  // ── Syslog
+  { t:'syslog', lbl:'Syslog Server',
+    re:/^(logging\s+(?:host\s+)?)((?:\d{1,3}\.){3}\d{1,3}|\S+\.\S+)/, vi:2,
+    cond: l => /^logging\s+(?:host\s+)?(?:\d{1,3}\.){3}\d{1,3}/.test(l.trim()) || /^logging\s+host\s+\S+/.test(l.trim()) },
+  // ── DNS
+  { t:'dns', lbl:'DNS Server',
+    re:/^(ip\s+name-server\s+)((?:\d{1,3}\.){3}\d{1,3})/, vi:2 },
+  // ── VPN
+  { t:'vpn', lbl:'VPN Pre-Shared Key',
+    re:/^(\s+(?:ikev1\s+|ikev2\s+(?:local|remote)\s+)?pre-shared-key\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  { t:'vpn', lbl:'ISAKMP Key',
+    re:/^(crypto\s+isakmp\s+key\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  // ── RADIUS server names
+  { t:'radius', lbl:'RADIUS Server Name',
+    re:/^(radius\s+server\s+)(\S+)/, vi:2 },
+  { t:'radius', lbl:'RADIUS Server Ref',
+    re:/^(\s+server\s+name\s+)(\S+)/, vi:2 },
+  { t:'radius', lbl:'RADIUS Host',
+    re:/^(radius-server\s+host\s+)((?:\d{1,3}\.){3}\d{1,3}|\S+)/, vi:2 },
+  // ── ip host (static hostname → IP)
+  { t:'iphost', lbl:'IP Host Name',
+    re:/^(ip\s+host\s+)(\S+)(\s+(?:\d+\s+)?((?:\d{1,3}\.){3}\d{1,3}))/, vi:2, ipHostIp:4 },
+  // ── ACL entries (standard & extended)
+  { t:'acl', lbl:'ACL Host',
+    re:/^(\s*(?:permit|deny)\s+(?:\S+\s+)?host\s+)((?:\d{1,3}\.){3}\d{1,3})/, vi:2 },
+  { t:'acl', lbl:'ACL Netzwerk',
+    re:/^(\s*(?:permit|deny)\s+(?:ip\s+|tcp\s+|udp\s+|icmp\s+|(?:\d+\s+))?)((?:\d{1,3}\.){3}\d{1,3})(\s+(?:\d{1,3}\.){3}\d{1,3})?/, vi:2, maskAt:3,
+    cond: l => /^\s*(?:permit|deny)\s+/.test(l) && /(?:\d{1,3}\.){3}\d{1,3}/.test(l) },
+];
+
+const SKIP_IPS = new Set(['0.0.0.0','255.255.255.255']);
+
+// ═══════════════════════════════════════════════
+//  GLOBAL DICTIONARY (dateiübergreifend)
+// ═══════════════════════════════════════════════
+const GD_KEY = 'cisco-anon-global-dict';
+
+function gdLoad() {
+  try {
+    const raw = localStorage.getItem(GD_KEY);
+    return raw ? JSON.parse(raw) : { version:'1.0', entries:{}, nextSeq:1 };
+  } catch { return { version:'1.0', entries:{}, nextSeq:1 }; }
+}
+function gdSave(gd) {
+  gd.lastUpdated = new Date().toISOString();
+  try { localStorage.setItem(GD_KEY, JSON.stringify(gd)); } catch(e) { console.warn('GD save failed', e); }
+}
+function gdClear() { localStorage.removeItem(GD_KEY); renderDictTab(); }
+function gdExport() {
+  dlFile(JSON.stringify(gdLoad(), null, 2), 'global-dict.json');
+}
+function gdImportFile(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = ev => {
+    try {
+      const gd = JSON.parse(ev.target.result);
+      localStorage.setItem(GD_KEY, JSON.stringify(gd));
+      renderDictTab();
+      showEl('gd-import-status', `<div class="status s-ok">✅ Wörterbuch importiert — ${Object.keys(gd.entries||{}).length} Einträge</div>`);
+    } catch { showEl('gd-import-status', `<div class="status s-err">❌ Ungültige Datei</div>`); }
+  };
+  rd.readAsText(f);
+}
+
+function genHash() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16);
+  });
+}
+
+function extractData(cfg, gd) {
+  const lines = cfg.split('\n');
+  const out   = lines.map(l => l); // mutable copy
+
+  // Dedup by VALUE only (not type:value) → gleicher Wert = gleicher Platzhalter, dateiübergreifend
+  const valMap = new Map(); // value → item (lokale Session)
+  const items  = [];
+
+  function get(type, label, value) {
+    if (!value || !value.trim()) return null;
+    if (SKIP_IPS.has(value)) return null;
+    const v = value.trim();
+
+    // 1. Bereits in dieser Datei gesehen → Zähler erhöhen, gleiche ID
+    if (valMap.has(v)) { valMap.get(v).count++; return valMap.get(v); }
+
+    // 2. Im globalen Wörterbuch bekannt → bestehende ID wiederverwenden
+    let id;
+    const fromDict = !!(gd && gd.entries[v]);
+    if (fromDict) {
+      id = gd.entries[v].id;
+      gd.entries[v].count = (gd.entries[v].count||0) + 1;
+    } else {
+      // 3. Neu anlegen
+      const seq = gd ? gd.nextSeq++ : (items.length + 1);
+      id = '*' + type.toUpperCase() + '_' + String(seq).padStart(3,'0') + '*';
+      if (gd) gd.entries[v] = { id, type, label, count:1 };
+    }
+
+    const item = { id, type, label, value:v, count:1, enabled:true, fromDict };
+    valMap.set(v, item);
+    items.push(item);
+    return item;
+  }
+
+  // ── Multi-line: VLAN names
+  let inVlan = false;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (/^vlan\s+\d+(\s+\d+)*$/.test(t)) { inVlan = true; continue; }
+    if (inVlan) {
+      const m = t.match(/^name\s+(\S+)/);
+      if (m) {
+        const it = get('vlan','VLAN Name', m[1]);
+        if (it) out[i] = lines[i].replace(m[1], it.id);
+      }
+      if (t !== '' && !/^\s/.test(lines[i])) inVlan = false;
+    }
+  }
+
+  // ── Line-by-line rules
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    for (const rule of RULES) {
+      if (rule.cond && !rule.cond(line)) continue;
+      const m = line.match(rule.re);
+      if (!m) continue;
+
+      let cur = out[i];
+
+      // main value
+      const val = m[rule.vi];
+      if (rule.maskAt && val) {
+        // val might contain "IP MASK" in one group → split
+        const parts = val.trim().split(/\s+/);
+        const ip   = parts[0];
+        const mask = parts[1];
+        const ipIt = get(rule.t, rule.lbl, ip);
+        if (ipIt) cur = cur.replace(ip, ipIt.id);
+        if (mask) {
+          const mIt = get('ip','Subnetzmaske', mask);
+          if (mIt) cur = cur.replace(mask, mIt.id);
+        }
+        // group maskAt
+        const gm = m[rule.maskAt];
+        if (gm) {
+          const mk = gm.trim();
+          const mIt2 = get('ip','Subnetzmaske', mk);
+          if (mIt2) cur = cur.replace(mk, mIt2.id);
+        }
+      } else if (val) {
+        const it = get(rule.t, rule.lbl, val);
+        if (it) cur = cur.replace(val, it.id);
+      }
+
+      // ip host: also extract the IP address in group ipHostIp
+      if (rule.ipHostIp) {
+        const ipVal = m[rule.ipHostIp];
+        if (ipVal) {
+          const iit = get('iphost', 'IP Host Adresse', ipVal.trim());
+          if (iit) cur = cur.replace(ipVal.trim(), iit.id);
+        }
+      }
+
+      // extra groups (e.g. ip route mask / next-hop)
+      if (rule.extras) {
+        for (const gi of rule.extras) {
+          const gv = m[gi];
+          if (!gv) continue;
+          const ev = gv.trim();
+          const eit = get('ip', 'IP/Maske', ev);
+          if (eit) cur = cur.replace(ev, eit.id);
+        }
+      }
+
+      out[i] = cur;
+      break; // first matching rule per line
+    }
+  }
+
+  // ── General IP scan: catch any remaining IPs not yet replaced
+  const IP_RE = /(?<!\*\w)(?<!\d)((?:\d{1,3}\.){3}\d{1,3})(?!\d)(?!\w*\*)/g;
+  const SKIP_RE = /^(?:0\.0\.0\.0|255\.255\.255\.255|255\.255\.255\.0|255\.255\.0\.0|255\.0\.0\.0|255\.255\.255\.128|255\.255\.255\.192|255\.255\.255\.224|255\.255\.255\.240|255\.255\.255\.248|255\.255\.255\.252)$/;
+  for (let i = 0; i < out.length; i++) {
+    const line = out[i];
+    if (!IP_RE.test(line)) continue;
+    IP_RE.lastIndex = 0;
+    let m2, newLine = line;
+    while ((m2 = IP_RE.exec(line)) !== null) {
+      const ip = m2[1];
+      if (SKIP_RE.test(ip)) continue;
+      // only replace if not already a placeholder (doesn't contain *)
+      if (newLine.includes(ip)) {
+        const it = get('rest', 'IP (allgemein)', ip);
+        if (it) newLine = newLine.split(ip).join(it.id);
+      }
+    }
+    out[i] = newLine;
+  }
+
+  return { items, anon: out.join('\n') };
+}
+
+// ═══════════════════════════════════════════════
+//  LOCAL STORAGE
+// ═══════════════════════════════════════════════
+const LS_PREFIX = 'cisco-anon-';
+
+function lsSave(hash, dataObj) {
+  try {
+    const entry = { ...dataObj, savedAt: new Date().toISOString() };
+    localStorage.setItem(LS_PREFIX + hash, JSON.stringify(entry));
+    pruneOldEntries();
+  } catch(e) { console.warn('localStorage full:', e); }
+}
+
+function lsLoad(hash) {
+  try {
+    const raw = localStorage.getItem(LS_PREFIX + hash);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function lsDelete(hash) {
+  localStorage.removeItem(LS_PREFIX + hash);
+}
+
+function lsAll() {
+  const entries = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k.startsWith(LS_PREFIX)) continue;
+    try {
+      const d = JSON.parse(localStorage.getItem(k));
+      entries.push({ hash: k.slice(LS_PREFIX.length), ...d });
+    } catch {}
+  }
+  return entries.sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''));
+}
+
+function pruneOldEntries() {
+  // keep max 50 entries
+  const all = lsAll();
+  if (all.length > 50) {
+    all.slice(50).forEach(e => lsDelete(e.hash));
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  ANALYZE
+// ═══════════════════════════════════════════════
+function doAnalyze() {
+  const raw = document.getElementById('ta-cfg').value.trim();
+  if (!raw) { alert('Bitte zuerst eine Konfiguration eingeben.'); return; }
+  S.origCfg = raw;
+  S.hash    = genHash();
+  const gd = gdLoad();
+  const { items, anon } = extractData(raw, gd);
+  gdSave(gd);
+  S.items   = items;
+  S.anonCfg = '! CONFIG-ANONYMIZER-HASH: ' + S.hash + '\n' + anon;
+  S.filter  = 'all';
+  renderResults();
+  document.getElementById('s2-card').classList.remove('hidden');
+  document.getElementById('s2-card').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function doClear() {
+  document.getElementById('ta-cfg').value = '';
+  document.getElementById('file-cfg').value = '';
+  document.getElementById('s1-info').textContent = '';
+  document.getElementById('s2-card').classList.add('hidden');
+  Object.assign(S, { origCfg:'', anonCfg:'', hash:'', items:[], filter:'all' });
+}
+
+// ═══════════════════════════════════════════════
+//  RENDER RESULTS TABLE
+// ═══════════════════════════════════════════════
+function renderResults() {
+  const items = S.items;
+
+  // Stats
+  const tc = {};
+  items.forEach(i => tc[i.type] = (tc[i.type]||0)+1);
+  document.getElementById('s2-cnt').textContent = items.length + ' Einträge';
+
+  const statsEl = document.getElementById('s2-stats');
+  statsEl.innerHTML = Object.entries(tc).map(([t,n]) => {
+    const m = TM[t] || { icon:'📌', name:t };
+    return `<div class="stat"><div class="stat-n">${n}</div><div class="stat-l">${m.icon} ${m.name}</div></div>`;
+  }).join('');
+
+  // Filters
+  const filEl = document.getElementById('s2-filters');
+  const types = ['all', ...Object.keys(tc)];
+  filEl.innerHTML = types.map(t => {
+    const m  = t==='all' ? {icon:'📋',name:'Alle'} : (TM[t]||{icon:'📌',name:t});
+    const cnt= t==='all' ? items.length : tc[t];
+    return `<button class="fc ${t===S.filter?'on':''}" onclick="setFilter('${t}')">${m.icon} ${m.name} (${cnt})</button>`;
+  }).join('');
+
+  renderTable();
+}
+
+function setFilter(t) { S.filter = t; renderResults(); }
+
+function toggleAll(checked) {
+  const tbody = document.getElementById('s2-tbody');
+  const vis = getVisible();
+  vis.forEach(item => { item.enabled = checked; });
+  // sync checkboxes
+  tbody.querySelectorAll('.row-chk').forEach(chk => { chk.checked = checked; });
+  tbody.querySelectorAll('tr').forEach(tr => tr.classList.toggle('disabled', !checked));
+}
+
+function getVisible() {
+  return S.filter === 'all' ? S.items : S.items.filter(i => i.type === S.filter);
+}
+
+function renderTable() {
+  const vis   = getVisible();
+  const tbody = document.getElementById('s2-tbody');
+  tbody.innerHTML = vis.map(item => {
+    const ri  = S.items.indexOf(item);
+    const m   = TM[item.type] || { bc:'', icon:'📌', name:item.type };
+    return `<tr class="${item.enabled?'':'disabled'}" id="row-${ri}">
+      <td><input type="checkbox" class="row-chk" ${item.enabled?'checked':''} onchange="toggleRow(${ri},this.checked)"></td>
+      <td><span class="badge ${m.bc}">${m.icon} ${m.name}</span></td>
+      <td style="color:var(--muted);font-size:12px">${esc(item.label)}${item.fromDict?' <span title="Aus globalem Wörterbuch" style="color:#58a6ff;font-size:10px">📚</span>':''}</td>
+      <td><input class="val-in" value="${esc(item.value)}" ${item.enabled?'':'disabled'}
+            oninput="S.items[${ri}].value=this.value" title="${esc(item.value)}"></td>
+      <td><span class="ph">${esc(item.id)}</span></td>
+      <td><span class="cnt">${item.count}×</span></td>
+    </tr>`;
+  }).join('');
+
+  // sync master checkbox
+  const allOn = vis.every(i => i.enabled);
+  const allOf = vis.every(i => !i.enabled);
+  const mc = document.getElementById('chk-all');
+  mc.checked = allOn;
+  mc.indeterminate = !allOn && !allOf;
+}
+
+function toggleRow(ri, on) {
+  S.items[ri].enabled = on;
+  const row = document.getElementById('row-' + ri);
+  row.classList.toggle('disabled', !on);
+  row.querySelector('.val-in').disabled = !on;
+  // sync master
+  const vis = getVisible();
+  const allOn = vis.every(i => i.enabled);
+  const allOf = vis.every(i => !i.enabled);
+  const mc = document.getElementById('chk-all');
+  mc.checked = allOn;
+  mc.indeterminate = !allOn && !allOf;
+}
+
+// ═══════════════════════════════════════════════
+//  BUILD ANONYMIZED CONFIG (respects enabled flags)
+// ═══════════════════════════════════════════════
+function buildAnon() {
+  // Start fresh from original, apply only enabled replacements
+  let cfg = S.origCfg;
+  // Build a replacement map: value → placeholder (only enabled)
+  const active = S.items.filter(i => i.enabled);
+  // Sort by value length descending to avoid partial replacements
+  const sorted = [...active].sort((a,b) => b.value.length - a.value.length);
+
+  // We need to be careful: replace in the EXTRACTED positions, not globally.
+  // Global string replace would corrupt config (e.g. same IP in comments).
+  // Best approach: re-run extraction but skip disabled items.
+
+  const lines  = S.origCfg.split('\n');
+  const out    = lines.map(l => l);
+
+  // Dedup by value only (consistent with extractData)
+  const enabledValues = new Map(active.map(i => [i.value, i.id]));
+
+  function applyIfEnabled(type, value, lineIdx) {
+    const id = enabledValues.get(value);
+    if (id) out[lineIdx] = out[lineIdx].replace(value, id);
+  }
+
+  // VLAN names
+  let inVlan = false;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (/^vlan\s+\d+(\s+\d+)*$/.test(t)) { inVlan=true; continue; }
+    if (inVlan) {
+      const m = t.match(/^name\s+(\S+)/);
+      if (m) applyIfEnabled('vlan', m[1], i);
+      if (t!=='' && !/^\s/.test(lines[i])) inVlan=false;
+    }
+  }
+
+  // Rules
+  for (let i = 0; i < lines.length; i++) {
+    for (const rule of RULES) {
+      if (rule.cond && !rule.cond(lines[i])) continue;
+      const m = lines[i].match(rule.re);
+      if (!m) continue;
+      const val = m[rule.vi];
+      if (val) {
+        if (rule.maskAt) {
+          const parts = val.trim().split(/\s+/);
+          applyIfEnabled(rule.t, parts[0], i);
+          if (parts[1]) applyIfEnabled('ip', parts[1], i);
+          const gm = m[rule.maskAt];
+          if (gm) applyIfEnabled('ip', gm.trim(), i);
+        } else {
+          applyIfEnabled(rule.t, val, i);
+        }
+      }
+      if (rule.ipHostIp) {
+        const ipVal = m[rule.ipHostIp];
+        if (ipVal) applyIfEnabled('iphost', ipVal.trim(), i);
+      }
+      if (rule.extras) {
+        for (const gi of rule.extras) {
+          const gv = m[gi]; if (!gv) continue;
+          applyIfEnabled('ip', gv.trim(), i);
+        }
+      }
+      break;
+    }
+  }
+
+  // General IP scan pass (rest)
+  const IP_RE2 = /(?<!\d)((?:\d{1,3}\.){3}\d{1,3})(?!\d)/g;
+  const SKIP_RE2 = /^(?:0\.0\.0\.0|255\.255\.255\.255|255\.255\.255\.0|255\.255\.0\.0|255\.0\.0\.0|255\.255\.255\.128|255\.255\.255\.192|255\.255\.255\.224|255\.255\.255\.240|255\.255\.255\.248|255\.255\.255\.252)$/;
+  for (let i = 0; i < lines.length; i++) {
+    IP_RE2.lastIndex = 0;
+    let m2, newLine = out[i];
+    while ((m2 = IP_RE2.exec(lines[i])) !== null) {
+      const ip = m2[1];
+      if (SKIP_RE2.test(ip)) continue;
+      applyIfEnabled('rest', ip, i);
+    }
+  }
+
+  return '! CONFIG-ANONYMIZER-HASH: ' + S.hash + '\n' + out.join('\n');
+}
+
+function buildDataFile() {
+  return {
+    version: '1.0',
+    hash: S.hash,
+    items: S.items.filter(i => i.enabled).map(({ id, type, label, value }) => ({ id, type, label, value }))
+  };
+}
+
+// ═══════════════════════════════════════════════
+//  DOWNLOAD
+// ═══════════════════════════════════════════════
+function dlFile(content, name) {
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([content],{type:'text/plain'})),
+    download: name
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+function dlAnon() {
+  lsSave(S.hash, buildDataFile());
+  dlFile(buildAnon(), 'config_anonymized_' + S.hash.slice(0,8) + '.txt');
+  showSaveConfirm();
+}
+function dlData() {
+  dlFile(JSON.stringify(buildDataFile(), null, 2), 'config_data_' + S.hash.slice(0,8) + '.json');
+}
+function dlBoth() {
+  lsSave(S.hash, buildDataFile());
+  dlFile(buildAnon(), 'config_anonymized_' + S.hash.slice(0,8) + '.txt');
+  setTimeout(() => dlFile(JSON.stringify(buildDataFile(), null, 2), 'config_data_' + S.hash.slice(0,8) + '.json'), 200);
+  showSaveConfirm();
+}
+
+function showSaveConfirm() {
+  const el = document.getElementById('s2-notice');
+  el.innerHTML = `<div class="status s-ok">💾 Daten automatisch im Browser gespeichert — beim Merge wird die passende Datei automatisch erkannt.</div>`;
+  el.classList.remove('hidden');
+}
+
+// ═══════════════════════════════════════════════
+//  MERGE
+// ═══════════════════════════════════════════════
+function renderSavedList() {
+  const entries = lsAll();
+  const cnt = document.getElementById('m-saved-cnt');
+  const list = document.getElementById('m-saved-list');
+  cnt.textContent = entries.length + ' gespeichert';
+
+  if (!entries.length) {
+    list.innerHTML = `<div style="color:var(--muted);font-size:13px">Noch keine Konfigurationen gespeichert.</div>`;
+    return;
+  }
+
+  list.innerHTML = `<div class="tbl-wrap"><table>
+    <thead><tr>
+      <th>Gespeichert am</th><th>Hash</th><th>Einträge</th><th></th>
+    </tr></thead>
+    <tbody>
+    ${entries.map(e => {
+      const dt = e.savedAt ? new Date(e.savedAt).toLocaleString('de-DE') : '–';
+      const n  = (e.items||[]).length;
+      const h8 = e.hash.slice(0,8);
+      return `<tr>
+        <td style="font-size:12px">${esc(dt)}</td>
+        <td><span class="hash-code">${esc(h8)}…</span></td>
+        <td><span class="cnt">${n}</span></td>
+        <td style="text-align:right">
+          <button class="btn btn-danger" style="padding:3px 10px;font-size:12px"
+            onclick="deleteSaved('${esc(e.hash)}')">🗑 Löschen</button>
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table></div>`;
+}
+
+function deleteSaved(hash) {
+  lsDelete(hash);
+  renderSavedList();
+}
+
+function checkMergeReady() {
+  if (!S.mCfg) return;
+
+  // Try auto-load from localStorage
+  const cfgHashM = S.mCfg.content.match(/^!\s*CONFIG-ANONYMIZER-HASH:\s*([a-f0-9-]+)/m);
+  const cfgHash  = cfgHashM ? cfgHashM[1].trim() : null;
+
+  const autoEl     = document.getElementById('md-auto-status');
+  const fallbackEl = document.getElementById('md-fallback');
+
+  if (cfgHash) {
+    const saved = lsLoad(cfgHash);
+    if (saved) {
+      S.mData = saved;
+      const dt = saved.savedAt ? ' (gespeichert: ' + new Date(saved.savedAt).toLocaleString('de-DE') + ')' : '';
+      showEl('md-auto-status', `<div class="status s-ok">✅ Datendatei automatisch erkannt${esc(dt)}</div>`);
+      fallbackEl.classList.add('hidden');
+      verifyAndShow(cfgHash);
+      return;
+    }
+  }
+
+  // Not found in localStorage — show fallback upload
+  if (cfgHash) {
+    autoEl.innerHTML = `<div class="status s-warn">⚠️ Keine gespeicherten Daten für diesen Hash gefunden.</div>`;
+    autoEl.classList.remove('hidden');
+  }
+  fallbackEl.classList.remove('hidden');
+
+  if (S.mData) verifyAndShow(cfgHash);
+}
+
+function verifyAndShow(cfgHash) {
+  const mCard = document.getElementById('m-verify');
+  mCard.classList.remove('hidden');
+
+  const datHash = S.mData.hash;
+  const hsEl    = document.getElementById('m-hash-status');
+
+  if (!cfgHash) {
+    hsEl.innerHTML = `<div class="status s-err">❌ Kein Hash in der Konfigurationsdatei gefunden. Falsche Datei?</div>`;
+    document.getElementById('m-action').classList.add('hidden');
+    return;
+  }
+  if (cfgHash !== datHash) {
+    hsEl.innerHTML = `<div class="status s-err">
+      ❌ Hash-Mismatch — die Dateien passen nicht zusammen.<br>
+      <small>Config: <code>${esc(cfgHash)}</code></small><br>
+      <small>Daten:&nbsp;&nbsp;<code>${esc(datHash)}</code></small>
+    </div>`;
+    document.getElementById('m-action').classList.add('hidden');
+    return;
+  }
+
+  hsEl.innerHTML = `<div class="status s-ok">✅ Hash verifiziert: <span class="hash-code">${esc(cfgHash)}</span></div>`;
+  const n = (S.mData.items||[]).length;
+  document.getElementById('m-summary').textContent =
+    n + ' Werte werden wiederhergestellt. Der Hash-Kommentar wird entfernt.';
+  document.getElementById('m-action').classList.remove('hidden');
+}
+
+function doMerge() {
+  let cfg   = S.mCfg.content;
+  const its = S.mData.items || [];
+
+  // Remove hash comment
+  cfg = cfg.replace(/^!\s*CONFIG-ANONYMIZER-HASH:.*(?:\r?\n)?/m, '');
+
+  // Sort by placeholder length descending (safety)
+  const sorted = [...its].sort((a,b) => b.id.length - a.id.length);
+  for (const it of sorted) {
+    const esc2 = it.id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    cfg = cfg.replace(new RegExp(esc2,'g'), it.value);
+  }
+
+  const fn = S.mCfg.name.replace(/_anonymized/,'').replace(/\.txt$/,'') + '_restored.txt';
+  dlFile(cfg, fn);
+
+  showEl('m-result', `<div class="status s-ok">✅ Merge erfolgreich — ${its.length} Werte wiederhergestellt.</div>`);
+}
+
+// ═══════════════════════════════════════════════
+//  UTIL
+// ═══════════════════════════════════════════════
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Init
+renderSavedList();
+renderDictTab();
+</script>
+</body>
+</html>
