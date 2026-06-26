@@ -250,7 +250,8 @@
           <option value="user">👤 Benutzername</option>
           <option value="snmp">📊 SNMP</option>
           <option value="bgp">🔄 BGP</option>
-          <option value="vlan">🏷 VLAN</option>
+          <option value="vlan">🏷 VLAN Name</option>
+          <option value="vlanid">🔢 VLAN ID</option>
           <option value="ntp">⏰ NTP</option>
           <option value="vpn">🔒 VPN</option>
           <option value="acl">📋 ACL</option>
@@ -498,7 +499,8 @@ const TM = {
   snmp:     { bc:'b-snmp',     icon:'📊', name:'SNMP' },
   ip:       { bc:'b-ip',       icon:'🌍', name:'IP-Adresse' },
   bgp:      { bc:'b-bgp',      icon:'🔄', name:'BGP' },
-  vlan:     { bc:'b-vlan',     icon:'🏷', name:'VLAN' },
+  vlan:     { bc:'b-vlan',     icon:'🏷', name:'VLAN Name' },
+  vlanid:   { bc:'b-vlan',     icon:'🔢', name:'VLAN ID' },
   ntp:      { bc:'b-ntp',      icon:'⏰', name:'NTP' },
   syslog:   { bc:'b-syslog',   icon:'📝', name:'Syslog' },
   vpn:      { bc:'b-vpn',      icon:'🔒', name:'VPN' },
@@ -687,19 +689,52 @@ function extractData(cfg, gd) {
     return item;
   }
 
-  // ── Multi-line: VLAN names
+  // ── Multi-line: VLAN IDs and names
+  function getVlanId(id) {
+    if (id === '1') return null;
+    return get('vlanid', 'VLAN ID', id);
+  }
+  function replaceVlanIds(line, idList) {
+    let result = line;
+    for (const id of idList) {
+      const it = getVlanId(id);
+      if (it) result = result.replace(new RegExp('\\b' + id + '\\b'), it.id);
+    }
+    return result;
+  }
+
   let inVlan = false;
   for (let i = 0; i < lines.length; i++) {
     const t = lines[i].trim();
-    if (/^vlan\s+\d+(\s+\d+)*$/.test(t)) { inVlan = true; continue; }
+    const vm = t.match(/^vlan\s+([\d,\s]+)$/);
+    if (vm) {
+      inVlan = true;
+      const ids = vm[1].split(/[,\s]+/).filter(Boolean);
+      out[i] = replaceVlanIds(lines[i], ids);
+      continue;
+    }
     if (inVlan) {
       const m = t.match(/^name\s+(\S+)/);
       if (m) {
-        const it = get('vlan','VLAN Name', m[1]);
+        const it = get('vlan', 'VLAN Name', m[1]);
         if (it) out[i] = lines[i].replace(m[1], it.id);
       }
       if (t !== '' && !/^\s/.test(lines[i])) inVlan = false;
     }
+  }
+
+  // ── VLAN IDs in interface/switchport lines
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    let m;
+    m = t.match(/^interface\s+[Vv]lan(\d+)/);
+    if (m) { const it = getVlanId(m[1]); if (it) out[i] = lines[i].replace(m[1], it.id); continue; }
+    m = t.match(/^switchport\s+access\s+vlan\s+(\d+)/);
+    if (m) { const it = getVlanId(m[1]); if (it) out[i] = lines[i].replace(new RegExp('\\b' + m[1] + '\\b'), it.id); continue; }
+    m = t.match(/^switchport\s+trunk\s+native\s+vlan\s+(\d+)/);
+    if (m) { const it = getVlanId(m[1]); if (it) out[i] = lines[i].replace(new RegExp('\\b' + m[1] + '\\b'), it.id); continue; }
+    m = t.match(/^switchport\s+trunk\s+allowed\s+vlan\s+(?:add\s+|remove\s+|except\s+)?([\d,]+)/);
+    if (m) { out[i] = replaceVlanIds(lines[i], m[1].split(',').map(x => x.trim()).filter(Boolean)); continue; }
   }
 
   // ── Line-by-line rules
@@ -1000,16 +1035,42 @@ function buildAnon() {
     if (id) out[lineIdx] = out[lineIdx].replace(value, id);
   }
 
-  // VLAN names
+  // VLAN IDs and names
+  function applyVlanIds(lineIdx, idList) {
+    for (const id of idList) {
+      const ph = enabledValues.get(id);
+      if (ph) out[lineIdx] = out[lineIdx].replace(new RegExp('\\b' + id + '\\b'), ph);
+    }
+  }
+
   let inVlan = false;
   for (let i = 0; i < lines.length; i++) {
     const t = lines[i].trim();
-    if (/^vlan\s+\d+(\s+\d+)*$/.test(t)) { inVlan=true; continue; }
+    const vm = t.match(/^vlan\s+([\d,\s]+)$/);
+    if (vm) {
+      inVlan = true;
+      applyVlanIds(i, vm[1].split(/[,\s]+/).filter(Boolean));
+      continue;
+    }
     if (inVlan) {
       const m = t.match(/^name\s+(\S+)/);
       if (m) applyIfEnabled('vlan', m[1], i);
-      if (t!=='' && !/^\s/.test(lines[i])) inVlan=false;
+      if (t !== '' && !/^\s/.test(lines[i])) inVlan = false;
     }
+  }
+
+  // VLAN IDs in interface/switchport lines
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    let m;
+    m = t.match(/^interface\s+[Vv]lan(\d+)/);
+    if (m) { applyIfEnabled('vlanid', m[1], i); continue; }
+    m = t.match(/^switchport\s+access\s+vlan\s+(\d+)/);
+    if (m) { applyIfEnabled('vlanid', m[1], i); continue; }
+    m = t.match(/^switchport\s+trunk\s+native\s+vlan\s+(\d+)/);
+    if (m) { applyIfEnabled('vlanid', m[1], i); continue; }
+    m = t.match(/^switchport\s+trunk\s+allowed\s+vlan\s+(?:add\s+|remove\s+|except\s+)?([\d,]+)/);
+    if (m) { applyVlanIds(i, m[1].split(',').map(x => x.trim()).filter(Boolean)); continue; }
   }
 
   // Rules
@@ -1254,6 +1315,7 @@ const TYPE_COLORS = {
   ip:       { c:'#56d364', bg:'rgba(63,185,80,0.2)'  },
   bgp:      { c:'#79c0ff', bg:'rgba(31,111,235,0.2)' },
   vlan:     { c:'#d2a8ff', bg:'rgba(137,87,229,0.2)' },
+  vlanid:   { c:'#c084fc', bg:'rgba(137,87,229,0.15)' },
   ntp:      { c:'#7ee787', bg:'rgba(63,185,80,0.2)'  },
   syslog:   { c:'#ffa657', bg:'rgba(210,153,34,0.2)' },
   vpn:      { c:'#ffa198', bg:'rgba(248,81,73,0.2)'  },
