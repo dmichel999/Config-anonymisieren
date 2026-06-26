@@ -1,14 +1,61 @@
 # Config anonymisieren — Claude Code Projektkontext
 
-Ältere / öffentliche Version des Cisco Config Anonymizers, deployed via GitHub Pages.
+Browser-Tool zum Anonymisieren von Cisco-Konfigurationen. Läuft vollständig im Browser, kein Server.
 
 ---
 
-## Was ist das?
+## URLs & Remotes
 
-Browser-Tool zum Anonymisieren von Cisco-Konfigurationen. Läuft vollständig im Browser, kein Server.
+| | URL |
+|---|---|
+| **GitHub Repo** | `https://github.com/dmichel999/Config-anonymisieren` |
+| **GitHub Pages (Live)** | `https://dmichel999.github.io/Config-anonymisieren-/` |
+| **Gitea (intern)** | `https://gitea.home.internal/claude/Config-anonymisieren` |
 
-**GitHub Pages URL:** `https://dmichel999.github.io/Config-anonymisieren-/`
+### Git Remotes (lokal)
+
+```bash
+git remote -v
+# origin  → https://<token>@github.com/dmichel999/Config-anonymisieren.git
+# gitea   → https://claude:<token>@gitea.home.internal/claude/Config-anonymisieren.git
+```
+
+### Pushen
+
+```bash
+git push          # → GitHub (origin, default)
+git push gitea    # → Gitea (intern)
+# oder beide auf einmal:
+git push && git push gitea
+```
+
+### Deployment
+
+GitHub Pages deployed automatisch nach `git push origin main`. Die aktive Version ist `index.html` — für die neueste Version `index-v3.html` → `index.html` kopieren/ersetzen und pushen.
+
+### Credentials
+
+- **GitHub Token:** `~/.claude/access/github.md` (Homeserver-Projekt) — Berechtigungen: Contents R/W, Administration R/W, Pages R/W
+- **Gitea Token:** `~/.claude/access/gitea.md` (Homeserver-Projekt) — User: `claude`
+- **Gitea SSL:** `http.sslVerify=false` ist im lokalen Git-Config gesetzt (selbstsigniertes Zert)
+
+### GitHub Repo-Metadaten via API aktualisieren
+
+```bash
+TOKEN=$(git remote get-url origin | grep -o 'gh[^@]*')
+
+# Beschreibung + Homepage
+curl -s -X PATCH "https://api.github.com/repos/dmichel999/Config-anonymisieren" \
+  -H "Authorization: token $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"description": "...", "homepage": "..."}'
+
+# Topics
+curl -s -X PUT "https://api.github.com/repos/dmichel999/Config-anonymisieren/topics" \
+  -H "Authorization: token $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"names":["cisco","anonymizer","network","privacy","browser-tool"]}'
+```
 
 ---
 
@@ -20,7 +67,7 @@ Browser-Tool zum Anonymisieren von Cisco-Konfigurationen. Läuft vollständig im
 - Auto-Save via localStorage
 - Platzhalterformat: `*HOSTNAME_001*`
 - **Vorschau** mit farblich hervorgehobenen Platzhaltern (je Typ eigene Farbe)
-- **Manuelles Anonymisieren** direkt in der Vorschau (Text markieren → Typ wählen → Anonymisieren)
+- **Manuelles Anonymisieren** direkt in der Vorschau (Text markieren → erscheint im Input → Typ wählen → Anonymisieren)
 - **Lernfunktion** — manuell anonymisierte Werte werden gespeichert und in zukünftigen Configs automatisch erkannt (🧠)
 - **Originalwert aufdecken** — Klick auf Platzhalter in der Vorschau zeigt den Originalwert; nochmal klicken versteckt ihn
 - **Gelernte Regeln verwalten** im Wörterbuch-Tab (filtern, einzeln oder alle löschen)
@@ -31,10 +78,11 @@ Browser-Tool zum Anonymisieren von Cisco-Konfigurationen. Läuft vollständig im
 
 | Datei | Zweck |
 |---|---|
-| `index.html` | Originalversion (GitHub Pages Einstiegspunkt) |
+| `index.html` | Aktive Version (GitHub Pages Einstiegspunkt) |
 | `index-v2.html` | + Vorschau mit Highlighting + manuelles Anonymisieren |
 | `index-v3.html` | + Lernfunktion + Originalwert aufdecken + Gelernte verwalten |
 | `cisco-config-anonymizer.html` | Ältere Alternativversion |
+| `README.md` | User-Doku (auf GitHub sichtbar) |
 
 ---
 
@@ -44,57 +92,54 @@ Browser-Tool zum Anonymisieren von Cisco-Konfigurationen. Läuft vollständig im
 |---|---|
 | `index.html` | Basisversion: Erkennung, Wörterbuch, Merge, Auto-Save |
 | `index-v2.html` | Vorschau (Step 3) mit farbigen Platzhaltern; manuelles Anonymisieren per Textmarkierung |
-| `index-v3.html` | Lernfunktion (🧠 gelernte Werte auto-erkennen); Klick auf Platzhalter zeigt Originalwert; Wörterbuch-Tab mit Filter + "Gelernte löschen"-Button |
+| `index-v3.html` | Lernfunktion (🧠); Klick auf Platzhalter zeigt Originalwert; Wörterbuch-Tab mit Filter + "Gelernte löschen"-Button; manuelles Anonymisieren via Input-Feld (statt fragiler mouseup-State-Kette) |
 
 ---
 
 ## Technische Details (v3)
 
-### Lernfunktion
-- Manuell anonymisierte Werte werden im globalen Wörterbuch (`localStorage`) mit `learned: true` gespeichert
-- In `extractData()` läuft nach allen Regelspässen ein "Learned Values Scan": durchsucht `out[]` nach bekannten gelernten Werten, ersetzt sie und setzt `learned: true, manual: true` auf dem Item
-- `manual: true` ist zwingend nötig, damit `buildAnon()` das Item im finalen Pass ersetzt
-- Gelernte Items erscheinen in der Erkannte-Daten-Tabelle mit 🧠-Icon
-- ✕-Button in der Tabelle löscht das Item aus `S.items` UND aus dem globalen Wörterbuch (sonst kommt es beim nächsten Analysieren wieder)
-- Scope: Browser-übergreifend via localStorage → für projektspezifische Werte "Gelernte löschen" im Wörterbuch-Tab nutzen
-
-### Originalwert aufdecken
-- Jeder Platzhalter-`<span>` in der Vorschau trägt `data-ph` (Platzhalter) und `data-orig` (Originalwert) als Attribute
-- `toggleReveal(span)` wechselt `textContent` zwischen Platzhalter und Originalwert
-- Guard: `if (window.getSelection().toString().trim()) return` verhindert Auslösung bei Textauswahl
-- Nur einzelne Tokens aufdeckbar — kein "Alle aufdecken"
-- Platzhalter markieren (nicht klicken) → Toolbar zeigt Originalwert direkt an
-
 ### Manuelles Anonymisieren — Funktionsweise
+
 - Textauswahl in der Vorschau (`<pre>`) triggert `document.mouseup`-Handler
 - Der Handler prüft `anchorNode` UND `focusNode` (rückwärts-Selektion funktioniert)
 - **Ausgewählter Text wird direkt in `<input id="s3-val-input">` in der Toolbar geschrieben** — kein JS-State, kein Timing-Problem
-- `manualAnonymize()` liest einfach `input.value.trim()` → absolut zuverlässig
-- User kann den Wert im Input auch manuell korrigieren, bevor er anonymisiert
-- `if (existing)` setzt jetzt auch `manual: true` + aktualisiert Typ → globale Ersetzung greift immer
+- `manualAnonymize()` liest `input.value.trim()` → absolut zuverlässig
+- User kann den Wert im Input auch manuell korrigieren vor dem Anonymisieren
+- `if (existing)` setzt `manual: true` + aktualisiert Typ → globale Ersetzung greift immer
+
+**⚠️ Warum kein JS-State (`S.currentSelection`)?**
+Die Event-Kette `mouseup → JS-State setzen → Button-Click → State lesen` ist fragil: der Browser löscht die Textauswahl beim Interagieren mit Dropdown oder Button — abhängig von Browser, Klickgeschwindigkeit, OS. Kein `captureSelection()` auf mousedown löst das zuverlässig. Lösung: Text direkt ins DOM (Input-Feld) schreiben.
+
+### Lernfunktion
+
+- Manuell anonymisierte Werte werden im globalen Wörterbuch (`localStorage`) mit `learned: true` gespeichert
+- In `extractData()` läuft ein "Learned Values Scan" nach allen Regel-Passes
+- `manual: true` ist zwingend nötig, damit `buildAnon()` das Item im finalen Pass global ersetzt
+- ✕-Button löscht Item aus `S.items` UND aus `gd.entries` (sonst kommt es beim nächsten Analysieren wieder)
+
+### Originalwert aufdecken
+
+- Jeder Platzhalter-`<span>` trägt `data-ph` und `data-orig` als Attribute
+- `toggleReveal(span)` wechselt zwischen Platzhalter und Originalwert
+- Guard: `if (window.getSelection().toString().trim()) return` — verhindert Auslösung bei Textauswahl
+- Platzhalter markieren (nicht klicken) → Toolbar zeigt Originalwert in `#s3-orig-preview`
 
 ### Cascade-Schutz
+
 - Selektion die Teile eines Platzhalters enthält (z.B. `IP_020*` ohne führendes `*`) wird ignoriert
 - Check: `if (/\*[A-Z_]+_\d{3}\*/.test(text)) return`
 
 ### buildAnon() — wichtige Reihenfolge
+
 1. Regel-basierte Passes (VLAN-Namen, RULES-Array, General IP Scan)
 2. Manueller Pass: `S.items.filter(i => i.enabled && i.manual)` — globale String-Ersetzung
-- Nur Items mit `manual: true` werden im finalen Pass ersetzt
-- Items aus `extractData()` Regel-Matches haben kein `manual: true` → werden nur durch Regel-Passes ersetzt
-- Items aus Lern-Scan und manueller Anonymisierung müssen `manual: true` haben
 
----
-
-## Deployment
-
-Änderungen werden via `git push` auf GitHub deployed. GitHub Pages picked es automatisch auf.
-Aktuell deployed: `index.html` (Originalversion). Für neue Version `index-v3.html` → `index.html` umbenennen/ersetzen.
+Nur Items mit `manual: true` werden global ersetzt. Items aus Lern-Scan und manueller Anonymisierung müssen `manual: true` haben.
 
 ---
 
 ## Technische Hinweise
 
 - Reines HTML/CSS/JS, kein Build-System
-- Testen: Datei lokal im Browser öffnen
+- Testen: Datei lokal im Browser öffnen (`index-v3.html`)
 - Kein Server-Setup nötig
