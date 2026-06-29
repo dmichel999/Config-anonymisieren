@@ -255,6 +255,7 @@
           <option value="ntp">⏰ NTP</option>
           <option value="vpn">🔒 VPN</option>
           <option value="acl">📋 ACL</option>
+          <option value="vrf">🗄 VRF</option>
           <option value="syslog">📝 Syslog</option>
         </select>
         <button id="s3-anon-btn" class="btn btn-primary hidden" onclick="manualAnonymize()">🔒 Anonymisieren</button>
@@ -508,6 +509,7 @@ const TM = {
   acl:      { bc:'b-acl',      icon:'📋', name:'ACL' },
   iphost:   { bc:'b-iphost',   icon:'📌', name:'IP Host' },
   radius:   { bc:'b-radius',   icon:'📡', name:'RADIUS' },
+  vrf:      { bc:'b-syslog',   icon:'🗄', name:'VRF' },
   rest:     { bc:'b-rest',     icon:'🔎', name:'IP (Rest)' },
 };
 
@@ -518,6 +520,9 @@ const RULES = [
     re:/^(hostname\s+)(\S+)/, vi:2 },
   { t:'domain', lbl:'Domain Name',
     re:/^(ip\s+domain[- ]name\s+)(\S+)/, vi:2 },
+  // ── VRF
+  { t:'vrf', lbl:'VRF Name',
+    re:/^((?:ip\s+vrf|vrf\s+definition)\s+)(\S+)/, vi:2 },
   // ── Usernames (before password rules)
   { t:'user', lbl:'Benutzername',
     re:/^(username\s+)(\S+)/, vi:2 },
@@ -581,6 +586,8 @@ const RULES = [
   { t:'ip', lbl:'Network-Statement',
     re:/^(\s+network\s+)((?:\d{1,3}\.){3}\d{1,3})(?:\s+(?:mask\s+)?((?:\d{1,3}\.){3}\d{1,3}))?/, vi:2, maskAt:3 },
   // ── NTP
+  { t:'password', lbl:'NTP Auth-Key',
+    re:/^(ntp\s+authentication-key\s+\d+\s+\S+\s+(?:\d+\s+)?)(\S+)/, vi:2 },
   { t:'ntp', lbl:'NTP Server',
     re:/^(ntp\s+server\s+(?:vrf\s+\S+\s+)?)(\S+)/, vi:2 },
   // ── Syslog
@@ -606,6 +613,8 @@ const RULES = [
   { t:'iphost', lbl:'IP Host Name',
     re:/^(ip\s+host\s+)(\S+)(\s+(?:\d+\s+)?((?:\d{1,3}\.){3}\d{1,3}))/, vi:2, ipHostIp:4 },
   // ── ACL entries (standard & extended)
+  { t:'acl', lbl:'ACL Name',
+    re:/^(ip\s+access-list\s+(?:extended|standard)\s+)(\S+)/, vi:2 },
   { t:'acl', lbl:'ACL Host',
     re:/^(\s*(?:permit|deny)\s+(?:\S+\s+)?host\s+)((?:\d{1,3}\.){3}\d{1,3})/, vi:2 },
   { t:'acl', lbl:'ACL Netzwerk',
@@ -614,6 +623,15 @@ const RULES = [
 ];
 
 const SKIP_IPS = new Set(['0.0.0.0','255.255.255.255']);
+
+function isMask(ip) {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(p => isNaN(p) || p < 0 || p > 255)) return false;
+  const n = (parts[0]*16777216 + parts[1]*65536 + parts[2]*256 + parts[3]) >>> 0;
+  if (n === 0 || n === 0xFFFFFFFF) return true;
+  const inv = (~n) >>> 0;
+  return (inv & (inv + 1)) === 0 || (n & (n + 1)) === 0;
+}
 
 // ═══════════════════════════════════════════════
 //  GLOBAL DICTIONARY (dateiübergreifend)
@@ -666,6 +684,7 @@ function extractData(cfg, gd) {
     if (!value || !value.trim()) return null;
     if (SKIP_IPS.has(value)) return null;
     const v = value.trim();
+    if (isMask(v)) return null;
 
     // 1. Bereits in dieser Datei gesehen → Zähler erhöhen, gleiche ID
     if (valMap.has(v)) { valMap.get(v).count++; return valMap.get(v); }
@@ -1323,6 +1342,7 @@ const TYPE_COLORS = {
   acl:      { c:'#79c0ff', bg:'rgba(31,111,235,0.2)' },
   iphost:   { c:'#d2a8ff', bg:'rgba(137,87,229,0.2)' },
   radius:   { c:'#ffa657', bg:'rgba(210,153,34,0.2)' },
+  vrf:      { c:'#ffa657', bg:'rgba(210,153,34,0.2)' },
   rest:     { c:'#7ee787', bg:'rgba(63,185,80,0.2)'  },
 };
 

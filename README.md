@@ -16,10 +16,12 @@ Das Tool erkennt kundenspezifische Daten automatisch:
 |---|---|
 | IP-Adressen | Interface, BGP, HSRP, DHCP-Relay, Tunnel, ACL, … |
 | Hostnamen & Domainnamen | `hostname`, `ip domain-name` |
-| Passwörter & Secrets | Enable, Username, Line, TACACS, RADIUS, VPN |
+| Passwörter & Secrets | Enable, Username, Line, TACACS, RADIUS, VPN, NTP Auth-Keys |
 | SNMP | Community Strings |
 | BGP | AS-Nummern, Neighbor-IPs |
 | VLAN-Namen | `name` unter `vlan` |
+| VRF-Namen | `ip vrf`, `vrf definition` |
+| ACL-Namen | `ip access-list extended/standard` |
 | Server | NTP, Syslog, DNS, RADIUS |
 | Weitere | Cisco DNA Token, Benutzernamen, IP-Host-Einträge |
 

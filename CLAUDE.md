@@ -61,7 +61,7 @@ curl -s -X PUT "https://api.github.com/repos/dmichel999/Config-anonymisieren/top
 
 ## Features
 
-- Automatische Erkennung: IPs, Hostnamen, Passwörter/Secrets, SNMP, BGP, VLANs, NTP, RADIUS, DNA-Token, Benutzernamen
+- Automatische Erkennung: IPs, Hostnamen, Passwörter/Secrets, SNMP, BGP, VLANs, NTP, NTP-Auth-Keys, RADIUS, DNA-Token, Benutzernamen, VRF-Namen, ACL-Namen
 - Globales Wörterbuch (dateiübergreifend, gleicher Wert → gleicher Platzhalter)
 - Merge-Funktion (anonymisierte Config mit Originaldaten wiederherstellen)
 - Auto-Save via localStorage
@@ -93,6 +93,7 @@ curl -s -X PUT "https://api.github.com/repos/dmichel999/Config-anonymisieren/top
 | `index.html` | Basisversion: Erkennung, Wörterbuch, Merge, Auto-Save |
 | `index-v2.html` | Vorschau (Step 3) mit farbigen Platzhaltern; manuelles Anonymisieren per Textmarkierung |
 | `index-v3.html` | Lernfunktion (🧠); Klick auf Platzhalter zeigt Originalwert; Wörterbuch-Tab mit Filter + "Gelernte löschen"-Button; manuelles Anonymisieren via Input-Feld (statt fragiler mouseup-State-Kette) |
+| `index-v3.html` (Update) | Wildcard-Masken-Fix (`isMask()`): keine False Positives mehr bei ACL-Einträgen; neue Typen: VRF-Namen, ACL-Namen, NTP-Auth-Keys |
 
 ---
 
