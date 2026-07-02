@@ -12,20 +12,26 @@ Browser-basiertes Tool zum Anonymisieren von Cisco-Konfigurationen (IOS · IOS-X
 
 Das Tool erkennt kundenspezifische Daten automatisch:
 
-| Kategorie | Beispiele |
+| Kategorie | Erkannte Kontexte |
 |---|---|
-| IP-Adressen | Interface, BGP, HSRP, DHCP-Relay, Tunnel, ACL, … |
-| Hostnamen & Domainnamen | `hostname`, `ip domain-name` |
-| Passwörter & Secrets | Enable, Username, Line, TACACS, RADIUS, VPN, NTP Auth-Keys |
-| SNMP | Community Strings |
-| BGP | AS-Nummern, Neighbor-IPs |
-| VLAN-Namen | `name` unter `vlan` |
-| VRF-Namen | `ip vrf`, `vrf definition` |
-| ACL-Namen | `ip access-list extended/standard` |
-| Server | NTP, Syslog, DNS, RADIUS |
-| Weitere | Cisco DNA Token, Benutzernamen, IP-Host-Einträge |
+| **IP-Adressen** | Interface, BGP Neighbor, HSRP/VRRP, DHCP-Relay, Tunnel, ACL, IP-Route, RADIUS/TACACS Server, Network-Statements |
+| **DHCP Relay** | `ip helper-address` — bekommt bewusst einen eigenen Platzhalter, getrennt von DNS/anderen IP-Kontexten |
+| **Hostnamen & Domainnamen** | `hostname`, `ip domain-name` |
+| **Passwörter & Secrets** | Enable Secret/Password, Username-Secret, Line-Passwort, TACACS/RADIUS Key, VPN Pre-Shared Key, ISAKMP Key, NTP Auth-Key, FTP-Passwort, SSH Key-Hash |
+| **Benutzernamen** | `username`, `ip ftp username`, `dot1x username`, SSH Pubkey-Chain (`username` eingerückt) |
+| **SNMP** | Community Strings |
+| **BGP** | AS-Nummern, Neighbor-IPs |
+| **VLAN-IDs** | `vlan <id>`, `interface Vlan<id>`, `switchport access/trunk/native vlan`, Ranges (`1-31`), `ip ftp/tftp source-interface Vlan<id>` |
+| **VLAN-Namen** | `name` unter `vlan`-Block |
+| **Interface Descriptions** | `description <text>` unter Interface |
+| **VRF-Namen** | `ip vrf`, `vrf definition` |
+| **ACL-Namen** | `ip access-list extended/standard` |
+| **Server** | NTP, Syslog, DNS, RADIUS |
+| **Weitere** | Cisco DNA Token, IP-Host-Einträge |
 
 Jeder erkannte Wert bekommt einen eindeutigen Platzhalter im Format `*HOSTNAME_001*`.
+
+**Wichtig:** DHCP-Relay-Adressen (`ip helper-address`) bekommen absichtlich eigene Platzhalter — auch wenn dieselbe IP anderswo als DNS-Server vorkommt. So sind keine Rückschlüsse auf die Netzwerkarchitektur möglich.
 
 ---
 
@@ -40,8 +46,8 @@ Nach der Analyse zeigt die **Vorschau** die anonymisierte Config mit farbig herv
 Wenn das Tool einen Wert nicht automatisch erkennt, kann er manuell anonymisiert werden:
 
 1. In der Vorschau den gewünschten Text **markieren**
-2. Der markierte Text erscheint in der Toolbar
-3. **Typ** aus dem Dropdown wählen (z. B. Hostname, IP-Adresse, Passwort)
+2. Der markierte Text erscheint im Eingabefeld der Toolbar (kann dort noch korrigiert werden)
+3. **Typ** aus dem Dropdown wählen (z. B. Hostname, IP-Adresse, Passwort, VLAN ID, Beschreibung …)
 4. **„🔒 Anonymisieren"** klicken
 
 Der Wert wird sofort durch einen Platzhalter ersetzt und in der Vorschau aktualisiert.

@@ -61,7 +61,8 @@ curl -s -X PUT "https://api.github.com/repos/dmichel999/Config-anonymisieren/top
 
 ## Features
 
-- Automatische Erkennung: IPs, Hostnamen, Passwörter/Secrets, SNMP, BGP, VLANs, NTP, NTP-Auth-Keys, RADIUS, DNA-Token, Benutzernamen, VRF-Namen, ACL-Namen
+- Automatische Erkennung: IPs, Hostnamen, Passwörter/Secrets, SNMP, BGP, VLAN-IDs/Namen, Interface Descriptions, NTP, RADIUS, DNA-Token, Benutzernamen, FTP/SSH-Pubkey-Credentials, VRF-Namen, ACL-Namen
+- **DHCP-Relay Isolation** (`ip helper-address`): bekommt eigenen Platzhalter, nie geteilt mit DNS — kein Rückschluss auf Infrastruktur möglich (`isolate: true` Flag in RULES)
 - Globales Wörterbuch (dateiübergreifend, gleicher Wert → gleicher Platzhalter)
 - Merge-Funktion (anonymisierte Config mit Originaldaten wiederherstellen)
 - Auto-Save via localStorage
@@ -93,7 +94,9 @@ curl -s -X PUT "https://api.github.com/repos/dmichel999/Config-anonymisieren/top
 | `index.html` | Basisversion: Erkennung, Wörterbuch, Merge, Auto-Save |
 | `index-v2.html` | Vorschau (Step 3) mit farbigen Platzhaltern; manuelles Anonymisieren per Textmarkierung |
 | `index-v3.html` | Lernfunktion (🧠); Klick auf Platzhalter zeigt Originalwert; Wörterbuch-Tab mit Filter + "Gelernte löschen"-Button; manuelles Anonymisieren via Input-Feld (statt fragiler mouseup-State-Kette) |
-| `index-v3.html` (Update) | Wildcard-Masken-Fix (`isMask()`): keine False Positives mehr bei ACL-Einträgen; neue Typen: VRF-Namen, ACL-Namen, NTP-Auth-Keys |
+| `index-v3.html` (Update 1) | Wildcard-Masken-Fix (`isMask()`): keine False Positives mehr bei ACL-Einträgen; neue Typen: VRF-Namen, ACL-Namen, NTP-Auth-Keys |
+| `index-v3.html` (Update 2) | VLAN-IDs anonymisieren (`vlan <id>`, `interface Vlan`, `switchport`); VLAN-Ranges (`1-31`); Interface Descriptions; username+secret `noBreak`-Fix |
+| `index-v3.html` (Update 3) | DHCP-Relay Isolation (`isolate: true`); FTP username/password; SSH Pubkey-Chain username+key-hash; `ip ftp/tftp source-interface Vlan` |
 
 ---
 
@@ -132,10 +135,29 @@ Die Event-Kette `mouseup → JS-State setzen → Button-Click → State lesen` i
 
 ### buildAnon() — wichtige Reihenfolge
 
-1. Regel-basierte Passes (VLAN-Namen, RULES-Array, General IP Scan)
-2. Manueller Pass: `S.items.filter(i => i.enabled && i.manual)` — globale String-Ersetzung
+1. VLAN-IDs und Namen (Blöcke + interface/switchport/ftp-Zeilen)
+2. Regel-basierte Passes (RULES-Array, `break` nach erstem Match — außer `noBreak: true`)
+3. General IP Scan (catch-all für verbleibende IPs)
+4. Manueller Pass: `S.items.filter(i => i.enabled && i.manual)` — globale String-Ersetzung
 
-Nur Items mit `manual: true` werden global ersetzt. Items aus Lern-Scan und manueller Anonymisierung müssen `manual: true` haben.
+Nur Items mit `manual: true` werden im finalen Pass global ersetzt.
+
+### RULES-Flags
+
+| Flag | Bedeutung |
+|---|---|
+| `noBreak: true` | Regel matched, aber nächste Regel darf die gleiche Zeile nochmal verarbeiten. Nötig bei `username`-Zeilen die auch ein `secret` enthalten. |
+| `isolate: true` | Dedup-Key ist `type:value` statt nur `value`. Verhindert Platzhalter-Sharing zwischen Typen (z.B. DNS-IP ≠ DHCP-Relay-IP). Dict-Eintrag bekommt `originalValue` für Learned-Scan und Wörterbuch-Anzeige. |
+
+### get() — Dedup-Logik
+
+```
+mapKey = isolate ? type+':'+value : value
+gdKey  = isolate ? type+':'+value : value
+```
+- Gleicher Wert, gleicher Typ → gleicher Platzhalter (via `valMap`)
+- Gleicher Wert, unterschiedlicher Typ mit `isolate` → unterschiedliche Platzhalter
+- `item.gdKey` wird gespeichert, damit `deleteItem()` den richtigen Dict-Eintrag löscht
 
 ---
 
