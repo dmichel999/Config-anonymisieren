@@ -109,6 +109,7 @@
     .b-iphost   { background:#8957e51a;color:#d2a8ff;border:1px solid #8957e544; }
     .b-radius   { background:#d299221a;color:#ffa657;border:1px solid #d2992244; }
     .b-rest     { background:#3fb9501a;color:#7ee787;border:1px solid #3fb95044; }
+    .b-desc     { background:#0d419d1a;color:#a5d6ff;border:1px solid #0d419d44; }
 
     /* ── Inputs in table ── */
     .val-in { background: var(--surface2); border: 1px solid transparent; border-radius: 4px; color: var(--code); font-family: 'Consolas','Monaco',monospace; font-size: 12px; padding: 3px 7px; width: 100%; outline: none; transition: border-color .15s; }
@@ -252,6 +253,7 @@
           <option value="bgp">🔄 BGP</option>
           <option value="vlan">🏷 VLAN Name</option>
           <option value="vlanid">🔢 VLAN ID</option>
+          <option value="description">📝 Beschreibung</option>
           <option value="ntp">⏰ NTP</option>
           <option value="vpn">🔒 VPN</option>
           <option value="acl">📋 ACL</option>
@@ -502,6 +504,7 @@ const TM = {
   bgp:      { bc:'b-bgp',      icon:'🔄', name:'BGP' },
   vlan:     { bc:'b-vlan',     icon:'🏷', name:'VLAN Name' },
   vlanid:   { bc:'b-vlan',     icon:'🔢', name:'VLAN ID' },
+  description: { bc:'b-desc', icon:'📝', name:'Beschreibung' },
   ntp:      { bc:'b-ntp',      icon:'⏰', name:'NTP' },
   syslog:   { bc:'b-syslog',   icon:'📝', name:'Syslog' },
   vpn:      { bc:'b-vpn',      icon:'🔒', name:'VPN' },
@@ -525,7 +528,9 @@ const RULES = [
     re:/^((?:ip\s+vrf|vrf\s+definition)\s+)(\S+)/, vi:2 },
   // ── Usernames (before password rules)
   { t:'user', lbl:'Benutzername',
-    re:/^(username\s+)(\S+)/, vi:2 },
+    re:/^(username\s+)(\S+)/, vi:2, noBreak:true },
+  { t:'description', lbl:'Interface Description',
+    re:/^(\s+description\s+)(.+)/, vi:2 },
   { t:'user', lbl:'dot1x Benutzername',
     re:/^(\s+dot1x\s+username\s+)(\S+)/, vi:2 },
   // ── Credentials
@@ -713,11 +718,19 @@ function extractData(cfg, gd) {
     if (id === '1') return null;
     return get('vlanid', 'VLAN ID', id);
   }
-  function replaceVlanIds(line, idList) {
+  function replaceVlanIds(line, tokenList) {
     let result = line;
-    for (const id of idList) {
-      const it = getVlanId(id);
-      if (it) result = result.replace(new RegExp('\\b' + id + '\\b'), it.id);
+    for (const token of tokenList) {
+      const rm = token.match(/^(\d+)-(\d+)$/);
+      if (rm) {
+        const itS = getVlanId(rm[1]), itE = getVlanId(rm[2]);
+        if (itS && itE) result = result.replace(new RegExp('\\b' + rm[1] + '-' + rm[2] + '\\b'), itS.id + '-' + itE.id);
+        else if (itS)   result = result.replace(new RegExp('\\b' + rm[1] + '\\b'), itS.id);
+        else if (itE)   result = result.replace(new RegExp('\\b' + rm[2] + '\\b'), itE.id);
+        continue;
+      }
+      const it = getVlanId(token);
+      if (it) result = result.replace(new RegExp('\\b' + token + '\\b'), it.id);
     }
     return result;
   }
@@ -752,7 +765,7 @@ function extractData(cfg, gd) {
     if (m) { const it = getVlanId(m[1]); if (it) out[i] = lines[i].replace(new RegExp('\\b' + m[1] + '\\b'), it.id); continue; }
     m = t.match(/^switchport\s+trunk\s+native\s+vlan\s+(\d+)/);
     if (m) { const it = getVlanId(m[1]); if (it) out[i] = lines[i].replace(new RegExp('\\b' + m[1] + '\\b'), it.id); continue; }
-    m = t.match(/^switchport\s+trunk\s+allowed\s+vlan\s+(?:add\s+|remove\s+|except\s+)?([\d,]+)/);
+    m = t.match(/^switchport\s+trunk\s+allowed\s+vlan\s+(?:add\s+|remove\s+|except\s+)?([\d,\-]+)/);
     if (m) { out[i] = replaceVlanIds(lines[i], m[1].split(',').map(x => x.trim()).filter(Boolean)); continue; }
   }
 
@@ -812,7 +825,7 @@ function extractData(cfg, gd) {
       }
 
       out[i] = cur;
-      break; // first matching rule per line
+      if (!rule.noBreak) break;
     }
   }
 
@@ -1055,10 +1068,18 @@ function buildAnon() {
   }
 
   // VLAN IDs and names
-  function applyVlanIds(lineIdx, idList) {
-    for (const id of idList) {
-      const ph = enabledValues.get(id);
-      if (ph) out[lineIdx] = out[lineIdx].replace(new RegExp('\\b' + id + '\\b'), ph);
+  function applyVlanIds(lineIdx, tokenList) {
+    for (const token of tokenList) {
+      const rm = token.match(/^(\d+)-(\d+)$/);
+      if (rm) {
+        const phS = enabledValues.get(rm[1]), phE = enabledValues.get(rm[2]);
+        if (phS && phE) out[lineIdx] = out[lineIdx].replace(new RegExp('\\b' + rm[1] + '-' + rm[2] + '\\b'), phS + '-' + phE);
+        else if (phS)   out[lineIdx] = out[lineIdx].replace(new RegExp('\\b' + rm[1] + '\\b'), phS);
+        else if (phE)   out[lineIdx] = out[lineIdx].replace(new RegExp('\\b' + rm[2] + '\\b'), phE);
+        continue;
+      }
+      const ph = enabledValues.get(token);
+      if (ph) out[lineIdx] = out[lineIdx].replace(new RegExp('\\b' + token + '\\b'), ph);
     }
   }
 
@@ -1088,7 +1109,7 @@ function buildAnon() {
     if (m) { applyIfEnabled('vlanid', m[1], i); continue; }
     m = t.match(/^switchport\s+trunk\s+native\s+vlan\s+(\d+)/);
     if (m) { applyIfEnabled('vlanid', m[1], i); continue; }
-    m = t.match(/^switchport\s+trunk\s+allowed\s+vlan\s+(?:add\s+|remove\s+|except\s+)?([\d,]+)/);
+    m = t.match(/^switchport\s+trunk\s+allowed\s+vlan\s+(?:add\s+|remove\s+|except\s+)?([\d,\-]+)/);
     if (m) { applyVlanIds(i, m[1].split(',').map(x => x.trim()).filter(Boolean)); continue; }
   }
 
@@ -1120,7 +1141,7 @@ function buildAnon() {
           applyIfEnabled('ip', gv.trim(), i);
         }
       }
-      break;
+      if (!rule.noBreak) break;
     }
   }
 
@@ -1334,7 +1355,8 @@ const TYPE_COLORS = {
   ip:       { c:'#56d364', bg:'rgba(63,185,80,0.2)'  },
   bgp:      { c:'#79c0ff', bg:'rgba(31,111,235,0.2)' },
   vlan:     { c:'#d2a8ff', bg:'rgba(137,87,229,0.2)' },
-  vlanid:   { c:'#c084fc', bg:'rgba(137,87,229,0.15)' },
+  vlanid:       { c:'#c084fc', bg:'rgba(137,87,229,0.15)' },
+  description:  { c:'#a5d6ff', bg:'rgba(13,65,157,0.15)'  },
   ntp:      { c:'#7ee787', bg:'rgba(63,185,80,0.2)'  },
   syslog:   { c:'#ffa657', bg:'rgba(210,153,34,0.2)' },
   vpn:      { c:'#ffa198', bg:'rgba(248,81,73,0.2)'  },
