@@ -410,7 +410,7 @@ function renderDictTab() {
       return `<tr>
         <td><span class="badge ${m.bc}">${m.icon} ${m.name}</span>${learnedBadge}</td>
         <td style="color:var(--muted);font-size:12px">${esc(e.label||'')}</td>
-        <td><span class="val-in" style="display:inline-block;padding:3px 7px">${esc(val)}</span></td>
+        <td><span class="val-in" style="display:inline-block;padding:3px 7px">${esc(e.originalValue || val)}</span></td>
         <td><span class="ph">${esc(e.id)}</span></td>
         <td><span class="cnt">${e.count||1}×</span></td>
         <td><button class="btn btn-danger" style="padding:2px 8px;font-size:11px"
@@ -528,9 +528,11 @@ const RULES = [
     re:/^((?:ip\s+vrf|vrf\s+definition)\s+)(\S+)/, vi:2 },
   // ── Usernames (before password rules)
   { t:'user', lbl:'Benutzername',
-    re:/^(username\s+)(\S+)/, vi:2, noBreak:true },
+    re:/^(\s*username\s+)(\S+)/, vi:2, noBreak:true },
   { t:'description', lbl:'Interface Description',
     re:/^(\s+description\s+)(.+)/, vi:2 },
+  { t:'user', lbl:'FTP Benutzername',
+    re:/^(ip\s+ftp\s+username\s+)(\S+)/, vi:2 },
   { t:'user', lbl:'dot1x Benutzername',
     re:/^(\s+dot1x\s+username\s+)(\S+)/, vi:2 },
   // ── Credentials
@@ -539,9 +541,13 @@ const RULES = [
   { t:'password', lbl:'Enable Password',
     re:/^(enable\s+password\s+(?:\d+\s+)?)(\S+)/, vi:2 },
   { t:'password', lbl:'Benutzer-Passwort',
-    re:/^(username\s+\S+(?:\s+privilege\s+\d+)?\s+(?:secret|password)\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+    re:/^(\s*username\s+\S+(?:\s+privilege\s+\d+)?\s+(?:secret|password)\s+(?:\d+\s+)?)(\S+)/, vi:2 },
   { t:'password', lbl:'dot1x Passwort',
     re:/^(\s+dot1x\s+username\s+\S+\s+password\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  { t:'password', lbl:'FTP Passwort',
+    re:/^(ip\s+ftp\s+password\s+(?:\d+\s+)?)(\S+)/, vi:2 },
+  { t:'password', lbl:'SSH Key-Hash',
+    re:/^(\s+key-hash\s+\S+\s+)(\S+)/, vi:2 },
   { t:'password', lbl:'Line-Passwort',
     re:/^(\s+password\s+(?:\d+\s+)?)(\S+)/, vi:2 },
   { t:'password', lbl:'TACACS Key',
@@ -575,7 +581,7 @@ const RULES = [
   { t:'ip', lbl:'IP Route',
     re:/^(ip\s+route\s+(?:vrf\s+\S+\s+)?)((?:\d{1,3}\.){3}\d{1,3})(\s+(?:\d{1,3}\.){3}\d{1,3})(\s+(?:\d{1,3}\.){3}\d{1,3})?/, vi:2, extras:[3,4] },
   { t:'ip', lbl:'DHCP Relay',
-    re:/^(\s+ip\s+helper-address\s+)((?:\d{1,3}\.){3}\d{1,3})/, vi:2 },
+    re:/^(\s+ip\s+helper-address\s+)((?:\d{1,3}\.){3}\d{1,3})/, vi:2, isolate:true },
   { t:'ip', lbl:'HSRP IP',
     re:/^(\s+standby\s+\d*\s*ip\s+)((?:\d{1,3}\.){3}\d{1,3})/, vi:2 },
   { t:'ip', lbl:'VRRP IP',
@@ -685,30 +691,33 @@ function extractData(cfg, gd) {
   const valMap = new Map(); // value → item (lokale Session)
   const items  = [];
 
-  function get(type, label, value) {
+  // isolate:true → eigener Dict-Key pro Typ, verhindert Platzhalter-Sharing (z.B. DNS ≠ DHCP Relay)
+  function get(type, label, value, isolate) {
     if (!value || !value.trim()) return null;
     if (SKIP_IPS.has(value)) return null;
-    const v = value.trim();
+    const v      = value.trim();
     if (isMask(v)) return null;
+    const mapKey = isolate ? type + ':' + v : v;
+    const gdKey  = isolate ? type + ':' + v : v;
 
     // 1. Bereits in dieser Datei gesehen → Zähler erhöhen, gleiche ID
-    if (valMap.has(v)) { valMap.get(v).count++; return valMap.get(v); }
+    if (valMap.has(mapKey)) { valMap.get(mapKey).count++; return valMap.get(mapKey); }
 
     // 2. Im globalen Wörterbuch bekannt → bestehende ID wiederverwenden
     let id;
-    const fromDict = !!(gd && gd.entries[v]);
+    const fromDict = !!(gd && gd.entries[gdKey]);
     if (fromDict) {
-      id = gd.entries[v].id;
-      gd.entries[v].count = (gd.entries[v].count||0) + 1;
+      id = gd.entries[gdKey].id;
+      gd.entries[gdKey].count = (gd.entries[gdKey].count||0) + 1;
     } else {
       // 3. Neu anlegen
       const seq = gd ? gd.nextSeq++ : (items.length + 1);
       id = '*' + type.toUpperCase() + '_' + String(seq).padStart(3,'0') + '*';
-      if (gd) gd.entries[v] = { id, type, label, count:1 };
+      if (gd) gd.entries[gdKey] = { id, type, label, count:1, originalValue: isolate ? v : undefined };
     }
 
-    const item = { id, type, label, value:v, count:1, enabled:true, fromDict };
-    valMap.set(v, item);
+    const item = { id, type, label, value:v, gdKey, count:1, enabled:true, fromDict };
+    valMap.set(mapKey, item);
     items.push(item);
     return item;
   }
@@ -761,6 +770,8 @@ function extractData(cfg, gd) {
     let m;
     m = t.match(/^interface\s+[Vv]lan(\d+)/);
     if (m) { const it = getVlanId(m[1]); if (it) out[i] = lines[i].replace(m[1], it.id); continue; }
+    m = t.match(/^ip\s+(?:ftp|tftp)\s+source-interface\s+[Vv]lan(\d+)/);
+    if (m) { const it = getVlanId(m[1]); if (it) out[i] = lines[i].replace(m[1], it.id); continue; }
     m = t.match(/^switchport\s+access\s+vlan\s+(\d+)/);
     if (m) { const it = getVlanId(m[1]); if (it) out[i] = lines[i].replace(new RegExp('\\b' + m[1] + '\\b'), it.id); continue; }
     m = t.match(/^switchport\s+trunk\s+native\s+vlan\s+(\d+)/);
@@ -786,7 +797,7 @@ function extractData(cfg, gd) {
         const parts = val.trim().split(/\s+/);
         const ip   = parts[0];
         const mask = parts[1];
-        const ipIt = get(rule.t, rule.lbl, ip);
+        const ipIt = get(rule.t, rule.lbl, ip, rule.isolate);
         if (ipIt) cur = cur.replace(ip, ipIt.id);
         if (mask) {
           const mIt = get('ip','Subnetzmaske', mask);
@@ -800,7 +811,7 @@ function extractData(cfg, gd) {
           if (mIt2) cur = cur.replace(mk, mIt2.id);
         }
       } else if (val) {
-        const it = get(rule.t, rule.lbl, val);
+        const it = get(rule.t, rule.lbl, val, rule.isolate);
         if (it) cur = cur.replace(val, it.id);
       }
 
@@ -852,7 +863,8 @@ function extractData(cfg, gd) {
   // ── Learned values scan: auto-apply manually learned entries
   if (gd) {
     const learnedEntries = Object.entries(gd.entries).filter(([, e]) => e.learned);
-    for (const [learnedVal, entry] of learnedEntries) {
+    for (const [learnedKey, entry] of learnedEntries) {
+      const learnedVal = entry.originalValue || learnedKey; // isolate-Einträge haben originalValue
       if (!learnedVal || SKIP_IPS.has(learnedVal)) continue;
       const it = get(entry.type, 'Gelernt', learnedVal);
       if (!it) continue;
@@ -1018,7 +1030,7 @@ function deleteItem(ri) {
   const item = S.items[ri];
   if (item.learned || item.manual) {
     const gd = gdLoad();
-    delete gd.entries[item.value];
+    delete gd.entries[item.gdKey || item.value];
     gdSave(gd);
   }
   S.items.splice(ri, 1);
@@ -1104,6 +1116,8 @@ function buildAnon() {
     const t = lines[i].trim();
     let m;
     m = t.match(/^interface\s+[Vv]lan(\d+)/);
+    if (m) { applyIfEnabled('vlanid', m[1], i); continue; }
+    m = t.match(/^ip\s+(?:ftp|tftp)\s+source-interface\s+[Vv]lan(\d+)/);
     if (m) { applyIfEnabled('vlanid', m[1], i); continue; }
     m = t.match(/^switchport\s+access\s+vlan\s+(\d+)/);
     if (m) { applyIfEnabled('vlanid', m[1], i); continue; }
